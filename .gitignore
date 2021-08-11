@@ -1,3 +1,6 @@
+.idea/
+bin/
+
 # Prerequisites
 *.d
 
@@ -30,3 +33,7 @@
 *.exe
 *.out
 *.app
+/.idea/.gitignore
+/.idea/modules.xml
+/.idea/SmallAllocator.iml
+/.idea/vcs.xml
