@@ -17,11 +17,11 @@ class SmartMemoryControlBlock {
     return m_is_available;
   }
 
-  [[nodiscard]] bool GetSize() const {
+  [[nodiscard]] uint_fast32_t GetSize() const {
     return m_length;
   }
 
-  void SetSize(DataType &new_length_value) {
+  void SetSize(DataType new_length_value) {
     m_length = new_length_value;
   }
 
@@ -64,10 +64,15 @@ class SmallAllocator {
   uint_fast8_t *m_end = m_memory + sizeof(uint_fast8_t) * guSize;
 
  public:
-  void *Alloc(unsigned int Size) {
+  void *Alloc(uint_fast32_t Size) {
     void *memory_location = nullptr;
     if (!m_has_initialized) {
       SmallAllocator();
+    }
+
+    if (Size > *m_end) {
+      cout << "We are fucked up, bro: no more memory" << endl;
+      return m_end;
     }
 
     Size = Size + sizeof(class SmartMemoryControlBlock<uint_fast8_t>);
@@ -86,34 +91,17 @@ class SmallAllocator {
       m_current_position = m_current_position + m_memory_control_block_->GetSize();
     }
     if (memory_location == nullptr) {
-      sbrk(Size);
-
-      /* The new memory will be where the last valid
-       * address left off
-       */
+      m_current_position = &m_memory[Size];
       memory_location = m_last_valid_address;
-
-      /* We'll move the last valid address forward
-       * Size
-       */
       m_last_valid_address = m_last_valid_address + Size;
 
-      /* We need to initialize the mem_control_block */
-      m_current_position_mcb = memory_location;
-      m_current_position_mcb->is_available = 0;
-      m_current_position_mcb->size = Size;
+      m_memory_control_block_ = new SmartMemoryControlBlock(static_cast<uint_fast8_t *>(memory_location));
+      m_memory_control_block_->SetAvailability(false);
+      m_memory_control_block_->SetSize(Size);
     }
+    *reinterpret_cast<uint_fast8_t *>(memory_location) += sizeof(class SmartMemoryControlBlock<uint_fast8_t>);
 
-    /* Now, no matter what (well, except for error conditions),
-     * memory_location has the address of the memory, including
-     * the mem_control_block
-     */
-
-    /* Move the pointer past the mem_control_block */
-    memory_location = memory_location + sizeof(struct mem_control_block);
-
-    /* Return the pointer */
-    return memory_location;
+    return static_cast<void*>(memory_location);
   };
 
   void *ReAlloc(void *Pointer, unsigned int Size) {
@@ -121,7 +109,9 @@ class SmallAllocator {
   };
 
   void Free(void *Pointer) {
-    return free(Pointer);
+    SmartMemoryControlBlock<uint_fast8_t> *restored_memory_block;
+    restored_memory_block = reinterpret_cast<SmartMemoryControlBlock<uint_fast8_t> *>(Pointer) - sizeof(SmartMemoryControlBlock<uint_fast8_t>);
+    restored_memory_block->SetAvailability(true);
   };
 
   SmallAllocator() {
