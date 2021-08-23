@@ -70,7 +70,7 @@ class SmallAllocator {
       SmallAllocator();
     }
 
-    if (Size > *m_end) {
+    if (Size >= guSize) {
       cout << "We are fucked up, bro: no more memory" << endl;
       return m_end;
     }
@@ -88,32 +88,43 @@ class SmallAllocator {
           break;
         }
       }
-      m_current_position = m_current_position + m_memory_control_block_->GetSize();
+      m_current_position += m_memory_control_block_->GetSize();
     }
     if (memory_location == nullptr) {
       m_current_position = &m_memory[Size];
       memory_location = m_last_valid_address;
-      m_last_valid_address = m_last_valid_address + Size;
+      m_last_valid_address += Size;
 
       m_memory_control_block_ = new SmartMemoryControlBlock(static_cast<uint_fast8_t *>(memory_location));
       m_memory_control_block_->SetAvailability(false);
       m_memory_control_block_->SetSize(Size);
     }
-    *reinterpret_cast<uint_fast8_t *>(memory_location) += m_memory_control_block_->GetSize();
+    *reinterpret_cast<uint_fast8_t *>(memory_location) +=
+        m_memory_control_block_ == nullptr ? sizeof(class SmartMemoryControlBlock<uint_fast8_t>)
+                                           : m_memory_control_block_->GetSize();
 
-    return static_cast<void*>(memory_location);
+    return static_cast<void *>(memory_location);
   };
 
   void *ReAlloc(void *Pointer, uint_fast32_t Size) {
+    m_memory_control_block_ = nullptr;
+    for (auto &item : m_memory) {
+      item = 0;
+    }
     void *memory_location = nullptr;
     if (!m_has_initialized) {
       SmallAllocator();
     }
+
+    if (Size >= guSize) {
+      cout << "We are fucked up, bro: no more memory" << endl;
+      return m_end;
+    }
+
     Size = Size + sizeof(class SmartMemoryControlBlock<uint_fast8_t>);
     m_current_position = m_start;
 
-    if (m_memory_control_block_ == nullptr) return m_current_position;
-    while (m_memory_control_block_->GetSize() != Size) {
+    while (m_current_position != m_last_valid_address) {
       m_memory_control_block_ = new SmartMemoryControlBlock(m_current_position);
 
       if (m_memory_control_block_->IsAvailable()) {
@@ -123,15 +134,34 @@ class SmallAllocator {
           break;
         }
       }
-      m_current_position = m_current_position + m_memory_control_block_->GetSize();
+      m_current_position += m_memory_control_block_->GetSize();
     }
-    memory_location = m_last_valid_address;
+    if (memory_location == nullptr) {
+      m_current_position = &m_memory[Size];
+      memory_location = m_last_valid_address;
+      m_last_valid_address += Size;
+
+      m_memory_control_block_ = new SmartMemoryControlBlock(static_cast<uint_fast8_t *>(memory_location));
+      m_memory_control_block_->SetAvailability(false);
+      m_memory_control_block_->SetSize(Size);
+    }
+    *reinterpret_cast<uint_fast8_t *>(memory_location) +=
+        m_memory_control_block_ == nullptr ? sizeof(class SmartMemoryControlBlock<uint_fast8_t>)
+                                           : m_memory_control_block_->GetSize();
+
+    return static_cast<void *>(memory_location);
   };
 
   void Free(void *Pointer) {
-    SmartMemoryControlBlock<uint_fast8_t> *restored_memory_block;
-    restored_memory_block = reinterpret_cast<SmartMemoryControlBlock<uint_fast8_t> *>(Pointer) - m_memory_control_block_->GetSize();
-    restored_memory_block->SetAvailability(true);
+    if (m_memory_control_block_ != nullptr) {
+      SmartMemoryControlBlock<uint_fast8_t> *restored_memory_block;
+      restored_memory_block =
+          reinterpret_cast<SmartMemoryControlBlock<uint_fast8_t> *>(Pointer) - m_memory_control_block_->GetSize();
+      restored_memory_block->SetAvailability(true);
+      return;
+    } else {
+      return;
+    }
   };
 
   SmallAllocator() {
